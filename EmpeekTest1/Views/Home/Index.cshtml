@@ -22,9 +22,12 @@
     </div>
     <div>
         <a ng-click="vm.GoTo('parentFolder')">...</a>
-        <div ng-repeat="folder in vm.files">
-            <a ng-click="vm.GoTo(folder)">{{ folder }}</a>
+        <div ng-show="!vm.busy">
+            <div ng-repeat="folder in vm.files">
+                <a ng-click="vm.GoTo(folder)">{{ folder }}</a>
+            </div>
         </div>
+        <div ng-show="vm.busy">Please wait for a moment!</div>
     </div>
 </div>
 <style>

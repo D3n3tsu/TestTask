@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Remoting.Contexts;
+using System.Security;
 using System.Threading.Tasks;
 using System.Web;
 
@@ -14,8 +15,6 @@ namespace EmpeekTest1.Infrastructure
         private int filesAboveHundred;
         private int filesTenToFifty;
         private int filesUnderTen;
-        private IEnumerable<DirectoryInfo> subfolders;
-        private IEnumerable<FileInfo> files;
 
         private List<string> filesInFolder;
 
@@ -23,16 +22,14 @@ namespace EmpeekTest1.Infrastructure
         {
             DirectoryInfo fldr = (DirectoryInfo)HttpContext.Current.Application.Contents["currentFolder"];
             
-            if (fldr == null)
-            {
-                currentFolder = new DirectoryInfo(Environment.CurrentDirectory);
-                HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
-            }
-            else
+            if (fldr != null)
             {
                 currentFolder = fldr;
             }
-            CountFiles();
+            else
+            {
+                GoToDrives();
+            }
         }
 
         public async Task<int> GetFilesAboveHundred()
@@ -52,27 +49,59 @@ namespace EmpeekTest1.Infrastructure
 
         public async void GoToFolder(string folderName)
         {
+            DirectoryInfo folder = folder = new DirectoryInfo(folderName);
             
-            var folder = new DirectoryInfo(Path.Combine(currentFolder.FullName, folderName));
+                if (currentFolder != null)
+                    folder = new DirectoryInfo(Path.Combine(currentFolder.FullName, folderName));
 
             if (folder.Exists)
             {
                 currentFolder = folder;
-                CountFiles();
-                HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
+                    
+                    HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
+                
             }
-
-            await Task.CompletedTask;
+            await CountFiles();
         }
 
         public async void GoToParentFolder()
         {
-            currentFolder = currentFolder.Parent;
-            CountFiles();
-            HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
-            await Task.CompletedTask;
+            if (currentFolder != null && currentFolder.Parent != null)
+            {
+                try
+                {
+                    currentFolder = currentFolder.Parent;
+                }
+                catch (SecurityException) { }
+                await CountFiles();
+                HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
+                await Task.CompletedTask;
+            }
+            else
+            {
+                GoToDrives();
+                await Task.CompletedTask;
+            }
+
         }
-         
+
+        private void GoToDrives()
+        {
+            DriveInfo[] drives = new DriveInfo[0];
+            try
+            {
+                drives = DriveInfo.GetDrives();
+            }
+            catch (SecurityException) { }
+            Clear();
+            //Work around
+            foreach (var item in drives)
+            {
+                filesInFolder.Add(item.RootDirectory.FullName);
+            }
+            HttpContext.Current.Application.Contents.Set("currentFolder", null);
+        }
+
         public async Task<IEnumerable<string>> GetFiles()
         {
             return await Task.FromResult(filesInFolder as IEnumerable<string>);
@@ -80,14 +109,15 @@ namespace EmpeekTest1.Infrastructure
 
         public async Task<string> GetCurrentFolder()
         {
+            if (currentFolder == null) return await Task.FromResult("");
             return await Task.FromResult(currentFolder.FullName);
         }
 
-        private void CountFiles()
+        private async Task CountFiles()
         {
-            subfolders = currentFolder.GetDirectories();
-            
-            files = currentFolder.GetFiles();
+            IEnumerable<DirectoryInfo> subfolders = currentFolder.GetDirectories();
+
+            IEnumerable<FileInfo> files = currentFolder.GetFiles();
 
             Clear();
 
@@ -114,11 +144,13 @@ namespace EmpeekTest1.Infrastructure
                     else if (size > 104857600) { filesAboveHundred++; }
                 }
             }
+            await Task.CompletedTask;
         }
 
         private void Clear()
         {
             filesInFolder = new List<string>();
+            
             filesAboveHundred = 0;
             filesTenToFifty = 0;
             filesUnderTen = 0;
@@ -127,7 +159,12 @@ namespace EmpeekTest1.Infrastructure
         private ulong GetFolderSize(DirectoryInfo folder)
         {
             ulong Size = 0;
-            var files = folder.GetFiles();
+            var files = new FileInfo[0];
+            try
+            {
+                files = folder.GetFiles();
+            }
+            catch (UnauthorizedAccessException) {}
             if (files.Count() > 0)
             {
                 foreach (var file in files)
@@ -136,7 +173,12 @@ namespace EmpeekTest1.Infrastructure
                 }
             }
 
-            var folders = folder.GetDirectories();
+            var folders = new DirectoryInfo[0];
+            try
+            {
+                folders = folder.GetDirectories();
+            }
+            catch { }
             if (folders.Count() > 0)
             {
                 foreach (var fold in folders)
