@@ -9,6 +9,7 @@ using System.Web;
 
 namespace EmpeekTest1.Infrastructure
 {
+    //implementing interface helps to use another service if needed without changing client code
     public class FolderService : IFolderNavigationService
     {
         private DirectoryInfo currentFolder;
@@ -20,6 +21,8 @@ namespace EmpeekTest1.Infrastructure
 
         public FolderService()
         {
+            //getting the current folder from Context helps to maintain state while service is created 
+            //for every http request 
             DirectoryInfo fldr = (DirectoryInfo)HttpContext.Current.Application.Contents["currentFolder"];
             
             if (fldr != null)
@@ -28,6 +31,7 @@ namespace EmpeekTest1.Infrastructure
             }
             else
             {
+                //if there is no current folder in Context program should show local disc drives
                 GoToDrives();
             }
         }
@@ -49,17 +53,19 @@ namespace EmpeekTest1.Infrastructure
 
         public async void GoToFolder(string folderName)
         {
-            DirectoryInfo folder = folder = new DirectoryInfo(folderName);
-            
-                if (currentFolder != null)
-                    folder = new DirectoryInfo(Path.Combine(currentFolder.FullName, folderName));
+            //creating new folder object. this folder will be valid only when going to any disc root
+            DirectoryInfo folder = new DirectoryInfo(folderName);
+            //when currentFolder variable is in context it means that current folder is deeper than root
+            //so folder name should be added to a current folder path
+            if (currentFolder != null)
+                folder = new DirectoryInfo(Path.Combine(currentFolder.FullName, folderName));
 
+            //this code snippet checks if we are trying to go to a folder. if we are trying to
+            //go to a file instead, new currentFolder path won't be saved
             if (folder.Exists)
             {
                 currentFolder = folder;
-                    
-                    HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
-                
+                HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
             }
             await CountFiles();
         }
@@ -68,6 +74,8 @@ namespace EmpeekTest1.Infrastructure
         {
             if (currentFolder != null && currentFolder.Parent != null)
             {
+                //caching security exceptions to not stop program when navigating to 
+                //folders with restricted by system access
                 try
                 {
                     currentFolder = currentFolder.Parent;
@@ -77,6 +85,7 @@ namespace EmpeekTest1.Infrastructure
                 HttpContext.Current.Application.Contents.Set("currentFolder", currentFolder);
                 await Task.CompletedTask;
             }
+            //if we are in the root folder or stored current folder is empty navigating to a disc drives 
             else
             {
                 GoToDrives();
@@ -94,11 +103,12 @@ namespace EmpeekTest1.Infrastructure
             }
             catch (SecurityException) { }
             Clear();
-            //Work around
+            //after clearing all fields we are storing all drives roots as available folders
             foreach (var item in drives)
             {
                 filesInFolder.Add(item.RootDirectory.FullName);
             }
+            //setting current folder to null so service knows that it should show drives
             HttpContext.Current.Application.Contents.Set("currentFolder", null);
         }
 
@@ -156,6 +166,8 @@ namespace EmpeekTest1.Infrastructure
             filesUnderTen = 0;
         }
 
+
+        //recursively checks all available folders to calculate their size
         private ulong GetFolderSize(DirectoryInfo folder)
         {
             ulong Size = 0;
@@ -165,6 +177,7 @@ namespace EmpeekTest1.Infrastructure
                 files = folder.GetFiles();
             }
             catch (UnauthorizedAccessException) {}
+            catch (PathTooLongException) { }
             if (files.Count() > 0)
             {
                 foreach (var file in files)
