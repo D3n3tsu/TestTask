@@ -22,8 +22,8 @@
                 var url = '/api/folders';
                 //if method is used at start of the program use simple api call to get folders
                 //else call api with query string
-                if (arguments[0] != undefined)
-                    url += '?newFolder=' + arguments[0]; 
+                if (arguments[0] !== undefined)
+                    url += '?newFolder=' + arguments[0];
                 $http.get(url)
                     .then(
                     //Success
@@ -40,8 +40,8 @@
                         console.error(error);
                         vm.busy = false;
                     }
-                    )
-            }
+                    );
+            };
 
             vm.GoTo();
         });
